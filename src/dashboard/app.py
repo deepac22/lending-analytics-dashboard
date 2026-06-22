@@ -228,9 +228,9 @@ st.markdown("""
         text-transform: uppercase;
     }
     
-    #MainMenu {visibility: hidden;}
+    /* #MainMenu {visibility: hidden;} */
     footer {visibility: hidden;}
-    header {visibility: hidden;}
+   /* header {visibility: hidden;} */
     
     .sidebar-separator {
         border: none;
