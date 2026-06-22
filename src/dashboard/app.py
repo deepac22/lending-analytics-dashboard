@@ -4,6 +4,7 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
+import psycopg2
 
 # ============ PAGE CONFIG ============
 st.set_page_config(
@@ -150,18 +151,9 @@ st.markdown("""
     }
     
     /* DELINQUENCY CARD - GRADIENT BORDER */
-    .metric-card-danger {
-        border-left: 4px solid #ff4757;
-        background: rgba(255, 71, 87, 0.08);
-    }
-    .metric-card-success {
-        border-left: 4px solid #2ed573;
-        background: rgba(46, 213, 115, 0.08);
-    }
-    .metric-card-warning {
-        border-left: 4px solid #ffa502;
-        background: rgba(255, 165, 2, 0.08);
-    }
+    .metric-card-danger { border-left: 4px solid #ff4757; background: rgba(255, 71, 87, 0.08); }
+    .metric-card-success { border-left: 4px solid #2ed573; background: rgba(46, 213, 115, 0.08); }
+    .metric-card-warning { border-left: 4px solid #ffa502; background: rgba(255, 165, 2, 0.08); }
     .metric-value-danger { color: #ff4757; }
     .metric-value-success { color: #2ed573; }
     .metric-value-warning { color: #ffa502; }
@@ -187,7 +179,6 @@ st.markdown("""
         padding-bottom: 10px;
     }
     
-    /* DATAFRAME */
     .dataframe-container {
         background: rgba(15, 20, 30, 0.7);
         backdrop-filter: blur(8px);
@@ -204,7 +195,6 @@ st.markdown("""
         margin-bottom: 12px;
     }
     
-    /* STREAMLIT OVERRIDES */
     .stDataFrame {
         background: transparent !important;
     }
@@ -227,7 +217,6 @@ st.markdown("""
         background: rgba(212, 175, 55, 0.05) !important;
     }
     
-    /* FOOTER */
     .footer {
         text-align: center;
         margin-top: 50px;
@@ -239,12 +228,10 @@ st.markdown("""
         text-transform: uppercase;
     }
     
-    /* Hide Streamlit Branding */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* SIDEBAR SEPARATOR */
     .sidebar-separator {
         border: none;
         height: 1px;
@@ -252,7 +239,6 @@ st.markdown("""
         margin: 20px 0;
     }
     
-    /* FILTER LABELS */
     .filter-label {
         color: #8892a8;
         font-size: 11px;
@@ -264,6 +250,49 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# ============ DATABASE CONNECTION ============
+# !!! REPLACE THIS WITH YOUR ACTUAL ENDPOINT !!!
+DB_ENDPOINT = "lending-analytics-db.cotq60e68s8c.us-east-1.rds.amazonaws.com"
+DB_NAME = "lendingdb"
+DB_USER = "lending_admin"
+DB_PASSWORD = "LendingSecurePass123!"
+
+@st.cache_resource
+def get_connection():
+    return psycopg2.connect(
+        host=DB_ENDPOINT,
+        database=DB_NAME,
+        user=DB_USER,
+        password=DB_PASSWORD,
+        port=5432
+    )
+
+@st.cache_data(ttl=60)
+def load_data():
+    conn = get_connection()
+    query = """
+        SELECT 
+            p.loan_id,
+            p.client_id,
+            p.product_id,
+            p.origination_date,
+            p.loan_amount,
+            p.interest_rate,
+            p.remaining_balance,
+            p.payment_status,
+            p.last_payment_date,
+            c.full_name,
+            c.province,
+            c.client_segment,
+            pr.product_name,
+            pr.product_type
+        FROM loan_portfolio p
+        JOIN clients c ON p.client_id = c.client_id
+        JOIN loan_products pr ON p.product_id = pr.product_id
+    """
+    df = pd.read_sql(query, conn)
+    return df
+
 # ============ HEADER ============
 today = datetime.now().strftime("%B %d, %Y")
 
@@ -271,24 +300,14 @@ st.markdown(f"""
 <div class="main-header">
     <span class="date-badge">📅 {today}</span>
     <h1>⚡ Lending Portfolio Analytics</h1>
-    <div class="subtitle">Executive Risk Dashboard · Real-time Delinquency Monitoring</div>
+    <div class="subtitle">Executive Risk Dashboard · Real-time Delinquency Monitoring · <span style="color:#2ed573;">☁️ Live Cloud DB</span></div>
 </div>
 """, unsafe_allow_html=True)
 
 # ============ LOAD DATA ============
-@st.cache_data
-def load_data():
-    portfolio = pd.read_csv('data/portfolio_raw.csv')
-    clients = pd.read_csv('data/clients_raw.csv')
-    products = pd.read_csv('data/products_raw.csv')
-    merged = portfolio.merge(clients, on='client_id').merge(products, on='product_id')
-    merged['origination_date'] = pd.to_datetime(merged['origination_date'])
-    merged['last_payment_date'] = pd.to_datetime(merged['last_payment_date'])
-    return merged
-
 df = load_data()
 
-# ============ SIDEBAR ============
+# ============ SIDEBAR FILTERS ============
 st.sidebar.markdown("<h2 style='text-align:center;'>🏛️ CONTROL PANEL</h2>", unsafe_allow_html=True)
 st.sidebar.markdown("<hr class='sidebar-separator'>", unsafe_allow_html=True)
 
@@ -317,7 +336,7 @@ status_filter = st.sidebar.multiselect(
 )
 
 st.sidebar.markdown("<hr class='sidebar-separator'>", unsafe_allow_html=True)
-st.sidebar.caption("🔒 Confidential · Simulated Data")
+st.sidebar.caption("🔒 Confidential · Live Data from AWS RDS")
 
 # ============ FILTER DATA ============
 filtered = df[
@@ -464,7 +483,7 @@ display_cols = ['full_name', 'province', 'product_name', 'loan_amount', 'remaini
 display_df = filtered[display_cols].copy()
 display_df['loan_amount'] = display_df['loan_amount'].apply(lambda x: f"${x:,.2f}")
 display_df['remaining_balance'] = display_df['remaining_balance'].apply(lambda x: f"${x:,.2f}")
-display_df['origination_date'] = display_df['origination_date'].dt.strftime('%Y-%m-%d')
+display_df['origination_date'] = pd.to_datetime(display_df['origination_date']).dt.strftime('%Y-%m-%d')
 
 st.dataframe(
     display_df,
@@ -485,6 +504,6 @@ st.markdown('</div>', unsafe_allow_html=True)
 # ============ FOOTER ============
 st.markdown("""
 <div class="footer">
-    ⚡ Lending Analytics Platform v3.0 · Confidential · For Internal Use Only
+    ⚡ Lending Analytics Platform v3.0 · Confidential · Powered by AWS RDS
 </div>
 """, unsafe_allow_html=True)
