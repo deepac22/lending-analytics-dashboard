@@ -35,20 +35,22 @@ if not all([DB_ENDPOINT, DB_PASSWORD, SENDER_EMAIL, SENDER_PASSWORD, RECEIVER_EM
     sys.exit(1)
 
 print("✅ Environment variables loaded successfully.")
+print("✅ Environment variables loaded successfully.")
+print(f"🔍 Debug - DB_ENDPOINT length: {len(DB_ENDPOINT) if DB_ENDPOINT else 0}")
+print(f"🔍 Debug - DB_PASSWORD length: {len(DB_PASSWORD) if DB_PASSWORD else 0}")
+print(f"🔍 Debug - SENDER_EMAIL length: {len(SENDER_EMAIL) if SENDER_EMAIL else 0}")
+print(f"🔍 Debug - RECEIVER_EMAIL length: {len(RECEIVER_EMAIL) if RECEIVER_EMAIL else 0}")
 
 # ==========================================
 # FUNCTION: Generate the PPT Report
 # ==========================================
 def generate_ppt():
     print("📊 Connecting to AWS RDS...")
-    conn = psycopg2.connect(
-        host=DB_ENDPOINT,
-        database=DB_NAME,
-        user=DB_USER,
-        password=DB_PASSWORD,
-        port=5432,
-        sslmode='require'
-    )
+        # Build a connection string (this is the most reliable way)
+    conn_string = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_ENDPOINT}:5432/{DB_NAME}?sslmode=require"
+    print(f"🔗 Attempting to connect to: {DB_ENDPOINT} (Password length: {len(DB_PASSWORD)})")
+    
+    conn = psycopg2.connect(conn_string)
     
     query = """
         SELECT 
