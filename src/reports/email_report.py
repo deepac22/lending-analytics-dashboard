@@ -80,6 +80,7 @@ def generate_ppt():
     else:
         ax.text(0.5, 0.5, 'No Delinquent Loans', ha='center', va='center')
     
+    os.makedirs('data', exist_ok=True)
     chart_path = 'data/delinquency_chart.png'
     plt.savefig(chart_path, bbox_inches='tight')
     plt.close()
@@ -105,6 +106,7 @@ def generate_ppt():
     top = Inches(1.5)
     slide.shapes.add_picture(chart_path, left, top, width=Inches(8))
 
+    os.makedirs('data', exist_ok=True)
     output_ppt = 'data/Lending_Portfolio_Report.pptx'
     prs.save(output_ppt)
     print(f"✅ PPT saved to {output_ppt}")
