@@ -46,7 +46,8 @@ def generate_ppt():
         database=DB_NAME,
         user=DB_USER,
         password=DB_PASSWORD,
-        port=5432
+        port=5432,
+        sslmode='require'
     )
     
     query = """
