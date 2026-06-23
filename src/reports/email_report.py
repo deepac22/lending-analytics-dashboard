@@ -12,21 +12,29 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email import encoders
 import os
+import sys
 
 # ==========================================
-# CONFIGURATION (!!! EDIT THESE !!!)
+# ALL CREDENTIALS COME FROM ENVIRONMENT VARIABLES
+# (GitHub Secrets or your local terminal)
 # ==========================================
-DB_ENDPOINT = "lending-analytics-db.cotq60e68s8c.us-east-1.rds.amazonaws.com"  # e.g., lending-analytics-db.xxxxxx.ca-central-1.rds.amazonaws.com
-DB_NAME = "lendingdb"
-DB_USER = "lending_admin"
-DB_PASSWORD = "LendingSecurePass123!"
-
-# EMAIL CONFIG (Use a Gmail "App Password" - see guide below)
+DB_ENDPOINT = os.getenv("DB_ENDPOINT")
+DB_NAME = os.getenv("DB_NAME", "lendingdb")
+DB_USER = os.getenv("DB_USER", "lending_admin")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+SENDER_EMAIL = os.getenv("SENDER_EMAIL")
+SENDER_PASSWORD = os.getenv("SENDER_PASSWORD")
+RECEIVER_EMAIL = os.getenv("RECEIVER_EMAIL")
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
-SENDER_EMAIL = "ddeepachandrasekar30@gmail.com"   
-SENDER_PASSWORD = "maro qkod gggx hdbj"   
-RECEIVER_EMAIL = "deepachandrasekar30@gmail.com" 
+
+# Check if we have all the necessary secrets
+if not all([DB_ENDPOINT, DB_PASSWORD, SENDER_EMAIL, SENDER_PASSWORD, RECEIVER_EMAIL]):
+    print("❌ ERROR: Missing environment variables!")
+    print("Please set: DB_ENDPOINT, DB_PASSWORD, SENDER_EMAIL, SENDER_PASSWORD, RECEIVER_EMAIL")
+    sys.exit(1)
+
+print("✅ Environment variables loaded successfully.")
 
 # ==========================================
 # FUNCTION: Generate the PPT Report
@@ -41,7 +49,6 @@ def generate_ppt():
         port=5432
     )
     
-    # Load data
     query = """
         SELECT 
             p.loan_id,
@@ -57,13 +64,11 @@ def generate_ppt():
     conn.close()
     print(f"✅ Loaded {len(df)} records from cloud DB.")
 
-    # Calculate metrics
     total_loans = len(df)
     total_value = df['remaining_balance'].sum()
     delinquent = df[df['payment_status'].isin(['90+ Days Past Due', 'Default'])]
     del_rate = (len(delinquent) / total_loans) * 100 if total_loans > 0 else 0
 
-    # Build Chart: Delinquency by Province
     prov_del = df[df['payment_status'].isin(['90+ Days Past Due', 'Default'])].groupby('province').size()
     
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -79,16 +84,13 @@ def generate_ppt():
     plt.savefig(chart_path, bbox_inches='tight')
     plt.close()
 
-    # Create PowerPoint
     print("📁 Generating PowerPoint...")
     prs = Presentation()
     
-    # Slide 1: Title
     slide = prs.slides.add_slide(prs.slide_layouts[0])
     slide.shapes.title.text = "Lending Portfolio Health Report"
     slide.placeholders[1].text = f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
 
-    # Slide 2: KPIs
     slide = prs.slides.add_slide(prs.slide_layouts[1])
     slide.shapes.title.text = "Executive Summary"
     text_frame = slide.placeholders[1].text_frame
@@ -97,7 +99,6 @@ def generate_ppt():
     text_frame.text += f"Delinquency Rate: {del_rate:.2f}%\n"
     text_frame.text += f"At-Risk Loans: {len(delinquent)}"
 
-    # Slide 3: Chart
     slide = prs.slides.add_slide(prs.slide_layouts[5])
     slide.shapes.title.text = "Regional Delinquency Breakdown"
     left = Inches(1)
@@ -109,9 +110,6 @@ def generate_ppt():
     print(f"✅ PPT saved to {output_ppt}")
     return output_ppt
 
-# ==========================================
-# FUNCTION: Send Email
-# ==========================================
 def send_email(attachment_path):
     print("📧 Preparing to send email...")
     
@@ -123,38 +121,23 @@ def send_email(attachment_path):
     body = "Attached is the daily lending portfolio health report."
     msg.attach(MIMEText(body, 'plain'))
 
-    # Attach file
-    try:
-        with open(attachment_path, "rb") as attachment:
-            part = MIMEBase('application', 'octet-stream')
-            part.set_payload(attachment.read())
-            encoders.encode_base64(part)
-            part.add_header(
-                'Content-Disposition',
-                f"attachment; filename= {os.path.basename(attachment_path)}",
-            )
-            msg.attach(part)
-    except Exception as e:
-        print(f"❌ Failed to attach file: {e}")
-        return
+    with open(attachment_path, "rb") as attachment:
+        part = MIMEBase('application', 'octet-stream')
+        part.set_payload(attachment.read())
+        encoders.encode_base64(part)
+        part.add_header(
+            'Content-Disposition',
+            f"attachment; filename= {os.path.basename(attachment_path)}",
+        )
+        msg.attach(part)
 
-    # Send Email
-    try:
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
-        server.quit()
-        print("✅ Email sent successfully!")
-    except Exception as e:
-        print(f"❌ Email failed: {e}")
+    server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
+    server.starttls()
+    server.login(SENDER_EMAIL, SENDER_PASSWORD)
+    server.sendmail(SENDER_EMAIL, RECEIVER_EMAIL, msg.as_string())
+    server.quit()
+    print("✅ Email sent successfully!")
 
-# ==========================================
-# MAIN EXECUTION
-# ==========================================
 if __name__ == "__main__":
-    # 1. Generate the PPT
     ppt_file = generate_ppt()
-    
-    # 2. Send the email
     send_email(ppt_file)
